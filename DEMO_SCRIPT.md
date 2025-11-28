@@ -58,10 +58,10 @@ Este documento sirve como un guion detallado para una presentación y demostraci
   3.  Pulsa **"➕ Agregar Pedido"** una vez y luego pulsa su botón **"Procesar"**.
 
 - **Evidencia Irrefutable (Logcat):**
-  - El log `D/OrderViewModel: processOrder: Iniciando #...` aparece en el hilo **`main`**.
-  - Inmediatamente después, los logs del `Repository` (`D/OrderRepository: processOrder...`) aparecen en un hilo llamado **`DefaultDispatcher-worker-X`**.
+  - El log `D/OrderViewModel: processOrder: Iniciando #...` aparece con un **ID de hilo (TID)** que es el del hilo `main`.
+  - Inmediatamente después, los logs del `Repository` (`D/OrderRepository: processOrder...`) aparecen con un **ID de hilo (TID) diferente** al del hilo `main`, indicando un cambio de contexto.
 
-- **Conclusión del Discurso:** "Observen el Logcat. La acción se inicia en 'main', pero gracias a `.flowOn(Dispatchers.Default)`, todo el flujo de procesamiento se traslada a un 'worker thread'. Esta simple línea es el corazón de nuestra estrategia para mantener la app fluida."
+- **Conclusión del Discurso:** "Observen el Logcat. La acción se inicia en el hilo `main` (identificado por su TID en el log, que es el segundo número después del PID). Pero gracias a `.flowOn(Dispatchers.Default)`, todo el flujo de procesamiento se traslada a un nuevo hilo de trabajo, lo cual se evidencia por un TID diferente. Esta simple línea es el corazón de nuestra estrategia para mantener la app fluida."
 
 ---
 
