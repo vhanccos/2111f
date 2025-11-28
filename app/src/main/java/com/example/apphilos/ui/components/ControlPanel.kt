@@ -11,6 +11,7 @@ fun ControlPanel(
     onAddOrder: () -> Unit,
     onProcessAll: () -> Unit,
     onClearOrders: () -> Unit,
+    onBackup: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -50,6 +51,17 @@ fun ControlPanel(
                 )
             ) {
                 Text("▶️ Procesar Todos")
+            }
+
+            // Botón para respaldar (WorkManager)
+            Button(
+                onClick = onBackup,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary
+                )
+            ) {
+                Text("💾 Respaldar (WM)")
             }
 
             // Botón para limpiar

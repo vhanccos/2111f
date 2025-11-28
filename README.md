@@ -1,4 +1,4 @@
-# 🔄 AppHilos: Simulación de Procesamiento de Pedidos
+# 🍕 AppHilos - Procesador de Pedidos
 
 ## Integrantes
 
@@ -10,103 +10,105 @@
 
 ## 📘 Resumen Ejecutivo
 
-Este proyecto es una **aplicación móvil para Android**, desarrollada íntegramente en **Kotlin con Jetpack Compose**. Su propósito principal es **demostrar y simular un sistema de procesamiento de pedidos en segundo plano**, utilizando coroutines de Kotlin para gestionar tareas asíncronas sin bloquear la interfaz de usuario.
+Este proyecto es una **aplicación móvil Android**, desarrollada en **Kotlin con Jetpack Compose**, diseñada para simular un **sistema de procesamiento de pedidos en tiempo real**. El objetivo principal es servir como un ejemplo práctico y educativo sobre el manejo de concurrencia y operaciones asíncronas en el desarrollo moderno de Android.
 
-La aplicación presenta una lista de pedidos predefinidos y permite al usuario controlar la simulación a través de un panel de control con las siguientes acciones:
+La aplicación permite:
 
-- **Iniciar:** Comienza el procesamiento de pedidos en estado "Pendiente".
-- **Pausar:** Detiene temporalmente la simulación.
-- **Reiniciar:** Restablece todos los pedidos a su estado inicial.
+- **Añadir** nuevos pedidos a una cola.
+- **Procesar** pedidos individualmente o todos a la vez.
+- **Visualizar** el estado de cada pedido en tiempo real (Pendiente, Cocinando, Listo) con una barra de progreso.
+- **Limitar** el número de pedidos que se "cocinan" simultáneamente para simular un entorno con recursos limitados.
 
-El estado de cada pedido se actualiza en tiempo real en la interfaz, cambiando de `PENDIENTE` a `EN PROCESO` y finalmente a `PROCESADO`, mostrando de manera clara el poder de la gestión de estado reactiva en Jetpack Compose.
+El enfoque del proyecto no está en la persistencia de datos, sino en la **orquestación de tareas en segundo plano (worker threads)** para no bloquear el **hilo principal (UI thread)**, garantizando una interfaz de usuario fluida y receptiva en todo momento.
 
 ---
 
-## 🖥️ Componentes de la Interfaz Implementados
+## 🌟 Arquitectura y Conceptos de Concurrencia
 
-A continuación se detallan las principales pantallas y componentes de la aplicación:
+A continuación se detallan los conceptos técnicos clave que la aplicación utiliza y dónde se pueden encontrar.
+
+### 1. Coroutines (Corrutinas)
+Las corrutinas son la base de toda la lógica asíncrona en la aplicación. Permiten que las operaciones de larga duración (como "cocinar" un pedido) se ejecuten sin bloquear el hilo principal, manteniendo la UI fluida y receptiva.
+
+### 2. Main Thread (UI Thread) vs. Worker Threads
+- **Main Thread**: Es el único hilo que puede modificar la interfaz de usuario. En esta app, Jetpack Compose gestiona este hilo por nosotros. Todas las funciones `@Composable` y sus actualizaciones se ejecutan en el hilo principal.
+- **Worker Threads**: Para evitar congelar la UI, cualquier tarea que tome tiempo se delega a hilos de trabajo en segundo plano. En nuestro caso, la "cocción" de los pedidos se realiza en un worker thread.
+
+### 3. Dispatchers
+Los `Dispatchers` son los que deciden en qué hilo o grupo de hilos se ejecutará una corrutina.
+- **`Dispatchers.Default`**: En `OrderRepository.kt`, la línea `.flowOn(Dispatchers.Default)` es crucial. Mueve la ejecución de todo el `flow` (que simula la cocción) a un worker thread del pool `Default`, asegurando que el `delay` y la lógica de progreso no afecten al hilo principal.
+
+### 4. `viewModelScope`
+Es un `CoroutineScope` integrado en la clase `ViewModel`. Cualquier corrutina lanzada en este ámbito se cancela automáticamente si el `ViewModel` se destruye (por ejemplo, cuando el usuario sale de la pantalla). Esto previene fugas de memoria y trabajo innecesario.
+
+- **Ubicación**: `OrderViewModel.kt`
+- **Uso**: Todas las funciones públicas como `addOrder()`, `processOrder()`, y `processAllPendingOrders()` usan `viewModelScope.launch` para iniciar tareas asíncronas de forma segura.
+
+### 5. `withContext`
+Aunque este proyecto prefiere `flowOn` por ser más idiomático para `Flows`, `withContext` es una función fundamental para cambiar de hilo dentro de una corrutina. Sirve para ejecutar un bloque de código en un `Dispatcher` específico y luego regresar al contexto original.
+
+### 6. `lifecycleScope` y Observación en Compose
+En la capa de UI (Composable functions), necesitamos observar los datos del `ViewModel` de una manera que respete el ciclo de vida de la UI.
+- **`collectAsState()`**: En `OrderProcessorScreen.kt`, usamos `val orders by viewModel.orders.collectAsState()`. Esta función de Jetpack Compose recolecta el `StateFlow` del `ViewModel` y automáticamente vuelve a dibujar la UI cuando los datos cambian.
+- **`LaunchedEffect`**: Se utiliza para recolectar el `Channel` de eventos del `ViewModel` y mostrar un `Snackbar`. El `LaunchedEffect` cancela su corrutina automáticamente cuando el Composable abandona la pantalla.
+
+### 7. WorkManager
+`WorkManager` es una biblioteca para trabajo en segundo plano que necesita ejecución garantizada y diferible.
+- **Estado en este proyecto**: La dependencia de `WorkManager` está incluida en el `build.gradle.kts`. Sin embargo, **no hay una implementación activa de un `Worker` en el código fuente actual**. Esto representa una oportunidad de mejora para procesar pedidos de forma persistente, incluso si el usuario cierra la aplicación.
+
+---
+
+## 🖥️ Descripción de Interfaces Implementadas
+
+La aplicación consta de una pantalla principal que integra varios componentes reutilizables.
 
 ### `OrderProcessorScreen`
 
-- **Propósito:** Es la pantalla principal y única de la aplicación. Orquesta la visualización de todos los demás componentes.
-- **Comportamiento Principal:** Muestra una lista de pedidos, un panel de control y un registro de logs. Recopila el estado del `OrderViewModel` y lo refleja en la UI, asegurando que la interfaz de usuario siempre muestre los datos más recientes.
+- **Propósito:** Es la pantalla única y principal de la aplicación. Orquesta todos los demás componentes.
+- **Comportamiento Principal:**
+    - Muestra un panel de control para añadir, procesar y limpiar pedidos.
+    - Presenta una tarjeta con estadísticas en tiempo real (total, pendientes, cocinando, listos).
+    - Muestra una lista de todos los pedidos (`OrderCard`) de forma reactiva.
+    - Utiliza `viewModel.orders.collectAsState()` para observar cambios y redibujar la UI.
+    - Utiliza `LaunchedEffect` para escuchar eventos del ViewModel y mostrar notificaciones (`Snackbar`).
 
 ### `ControlPanel` (Componente)
 
-- **Propósito:** Proporcionar al usuario los controles para manejar la simulación.
-- **Comportamiento Principal:** Contiene los botones "Iniciar", "Pausar" y "Reiniciar". Cada botón está vinculado a las funciones correspondientes en el `OrderViewModel` para controlar el flujo del procesamiento de pedidos. También muestra una barra de progreso que refleja el avance general de la simulación.
+- **Propósito:** Agrupar los botones de acción principales.
+- **Comportamiento:** Contiene los botones para "Añadir Pedido", "Procesar Todos" y "Limpiar Pedidos", delegando las acciones al `OrderViewModel`.
 
 ### `OrderCard` (Componente)
 
-- **Propósito:** Mostrar la información de un único pedido de forma clara y visual.
-- **Comportamiento Principal:** Es una tarjeta que presenta el ID del pedido, su descripción y su estado actual. El color del indicador de estado cambia dinámicamente (`PENDIENTE` en gris, `EN PROCESO` en azul, `PROCESADO` en verde) para ofrecer una retroalimentación visual inmediata.
+- **Propósito:** Mostrar la información de un único pedido.
+- **Comportamiento:**
+    - Muestra el nombre, estado y una barra de progreso (`LinearProgressIndicator`) que se actualiza en tiempo real.
+    - Contiene un botón para procesar ese pedido específico.
+    - El color y la información cambian según el `OrderStatus` del pedido.
 
 ---
 
 ## ⚙️ Instrucciones de Ejecución
 
-Sigue los siguientes pasos para compilar y ejecutar el proyecto:
+Sigue los siguientes pasos para compilar o ejecutar el proyecto:
 
-1.  **Clonar el repositorio:**
+1. **Clonar el repositorio:**
+   ```bash
+   git clone [URL_DEL_REPOSITORIO]
+   ```
+   o descargar el archivo ZIP desde GitHub.
 
-    ```bash
-    git clone [URL_DEL_REPOSITORIO]
-    ```
+2. **Abrir el proyecto:**
+   - Descomprime el archivo (si descargaste el ZIP).
+   - Abre **Android Studio** y selecciona la carpeta del proyecto.
 
-    o descargar el archivo ZIP del proyecto.
+3. **OPCION A: Ejecutar la aplicación en modo desarrollo:**
+   - Conecta un dispositivo Android o utiliza un emulador.
+   - Haz clic en **Run ▶️** dentro de Android Studio.
 
-2.  **Abrir el proyecto:**
-    - Descomprime el archivo (si lo descargaste en formato ZIP).
-    - Abre **Android Studio** y selecciona la carpeta del proyecto (`appHilos`).
-
-3.  **Ejecutar la aplicación (Modo Desarrollo):**
-    - Asegúrate de tener un dispositivo Android conectado o un emulador configurado.
-    - Haz clic en el botón **Run ▶️** en la barra de herramientas de Android Studio.
-
-4.  **Generar un APK de Lanzamiento (Opcional):**
-    - Para generar un APK no firmado, puedes ejecutar la siguiente tarea de Gradle desde la terminal de Android Studio:
-      ```bash
-      ./gradlew assembleRelease
-      ```
-    - El archivo generado se encontrará en la ruta:
-      ```
-      app/build/outputs/apk/release/app-release-unsigned.apk
-      ```
-    - **Nota:** Para instalar este APK en un dispositivo o publicarlo, necesitarás firmarlo con una clave de lanzamiento.
-
----
-
-## 📊 Características Técnicas
-
-- **Arquitectura:** MVVM (Model-View-ViewModel), separando la lógica de la interfaz de usuario.
-- **Interfaz de Usuario:** 100% construida con **Jetpack Compose**, el moderno toolkit de UI declarativo de Android.
-- **Gestión de Estado:** Uso de `StateFlow` y `MutableState` dentro del `OrderViewModel` para gestionar y exponer el estado de manera reactiva y segura para el ciclo de vida.
-- **Asincronía:** Implementación de **Coroutines de Kotlin** para manejar el procesamiento en segundo plano, evitando bloquear el hilo principal y manteniendo una UI fluida.
-- **Patrón de Diseño:** Componentes de UI reutilizables y sin estado (`OrderCard`, `ControlPanel`) que reciben datos y lambdas para comunicar eventos.
-
----
-
-## 🔧 Funcionalidades Principales
-
-- **Simulación de Procesamiento Asíncrono:** El núcleo de la aplicación simula el procesamiento de pedidos utilizando coroutines, actualizando el estado de cada uno secuencialmente.
-- **Control Interactivo de la Simulación:** Permite al usuario iniciar, pausar y reiniciar el proceso, demostrando el control sobre las tareas en segundo plano.
-- **Visualización del Estado en Tiempo Real:** La interfaz se actualiza automáticamente para reflejar el estado actual de cada pedido y el progreso general.
-- **Registro de Eventos (Logging):** Muestra un log de eventos importantes, como el inicio, la pausa y la finalización de la simulación.
-
----
-
-## 🗃️ Modelo de Datos
-
-El modelo de datos de la aplicación es sencillo y se centra en representar un pedido y su ciclo de vida:
-
-- **`Order`**: Representa un pedido con las siguientes propiedades:
-  - `id` (Int): Identificador único.
-  - `description` (String): Descripción del pedido.
-  - `timestamp` (Long): Marca de tiempo de su creación.
-  - `status` (OrderStatus): El estado actual del pedido.
-
-- **`OrderStatus`**: Es una clase `enum` que define los posibles estados de un pedido:
-  - `PENDING` (Pendiente)
-  - `IN_PROGRESS` (En Proceso)
-  - `PROCESSED` (Procesado)
-  - `CANCELLED` (Cancelado - no utilizado en la simulación actual pero disponible).
+4. **OPCION B: Generar APK de lanzamiento:**
+   ```bash
+   ./gradlew assembleRelease
+   ```
+   El APK sin firmar se encontrará en `app/build/outputs/apk/release/app-release-unsigned.apk`. Para instalarlo, debe ser firmado primero.
+   
+   📘 [Guía oficial para firmar APKs](https://developer.android.com/studio/publish/app-signing)

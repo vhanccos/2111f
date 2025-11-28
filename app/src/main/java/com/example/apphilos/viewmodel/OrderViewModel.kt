@@ -1,27 +1,33 @@
 package com.example.apphilos.viewmodel
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.apphilos.model.Order
 import com.example.apphilos.model.OrderStatus
 import com.example.apphilos.repository.OrderRepository
+import com.example.apphilos.workers.BackupWorker
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.async
 import java.util.concurrent.atomic.AtomicInteger
 
-class OrderViewModel : ViewModel() {
+class OrderViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = OrderRepository()
+    private val workManager = WorkManager.getInstance(application)
 
     private val _orders = MutableStateFlow<List<Order>>(emptyList())
     val orders: StateFlow<List<Order>> = _orders.asStateFlow()
+
 
     private val orderCounter = AtomicInteger(0)
     private val ordersMutex = Mutex()
@@ -122,6 +128,19 @@ class OrderViewModel : ViewModel() {
                 Log.d("OrderViewModel", "clearOrders: Completado")
             } catch (e: Exception) {
                 Log.e("OrderViewModel", "clearOrders: ERROR", e)
+            }
+        }
+    }
+
+    fun scheduleBackup() {
+        viewModelScope.launch {
+            try {
+                val backupRequest = OneTimeWorkRequestBuilder<BackupWorker>().build()
+                workManager.enqueue(backupRequest)
+                _events.send("Respaldo programado con WorkManager")
+                Log.d("OrderViewModel", "scheduleBackup: Tarea de respaldo programada")
+            } catch (e: Exception) {
+                Log.e("OrderViewModel", "scheduleBackup: ERROR", e)
             }
         }
     }

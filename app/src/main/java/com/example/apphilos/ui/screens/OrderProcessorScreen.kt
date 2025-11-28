@@ -52,7 +52,8 @@ fun OrderProcessorScreen(
                 ControlPanel(
                     onAddOrder = { viewModel.addOrder() },
                     onProcessAll = { viewModel.processAllPendingOrders() },
-                    onClearOrders = { viewModel.clearOrders() }
+                    onClearOrders = { viewModel.clearOrders() },
+                    onBackup = { viewModel.scheduleBackup() }
                 )
             }
 
